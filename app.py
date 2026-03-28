@@ -429,8 +429,7 @@ def api_submission(sub_id):
     inst_id = current_user.institution_id if not current_user.is_superadmin else None
     return jsonify(db.get_submission(sub_id, institution_id=inst_id) or {})
 
-
+db.init_db()
 # ── Boot ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    db.init_db()
     app.run(debug=True, port=5000)
