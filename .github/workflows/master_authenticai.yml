@@ -1,7 +1,7 @@
 name: Build and deploy Python app to Azure Web App
 
 env:
-  AZURE_WEBAPP_NAME: authenticai-gjbfguhud8a8gffv
+  AZURE_WEBAPP_NAME: AuthenticAI
   PYTHON_VERSION: '3.10'
 
 on:
