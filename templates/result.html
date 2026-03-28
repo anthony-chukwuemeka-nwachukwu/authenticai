@@ -1,0 +1,367 @@
+{% extends "base.html" %}
+{% block title %}Result #{{ sub.id }} — AuthenticAI{% endblock %}
+{% block content %}
+
+{% set verdict_lower = sub.verdict | lower | replace(' ', '') %}
+
+<div class="flex" style="gap:1rem;margin-bottom:1.5rem;align-items:center;">
+  <a href="/" class="btn btn-ghost" style="padding:0.4rem 0.75rem;">← Back</a>
+  <h1 class="page-title" style="margin:0;">
+    Submission #{{ sub.id }}
+    <span style="color:var(--muted);font-weight:400;font-size:1rem;">· {{ student_name }} · {{ sub.course_code }}</span>
+  </h1>
+</div>
+
+<div class="grid2">
+
+  <!-- ── Left: Scores + Verdict ── -->
+  <div style="display:flex;flex-direction:column;gap:1.5rem;">
+
+    <!-- Verdict card -->
+    <div class="card" style="border-color:{% if sub.status == 'flagged' or sub.verdict == 'Strong Flag' %}rgba(239,68,68,0.4){% elif sub.verdict == 'Investigate' %}rgba(249,115,22,0.3){% elif sub.verdict == 'Monitor' %}rgba(245,158,11,0.3){% else %}var(--border){% endif %}">
+      <div class="card-title">Verdict</div>
+      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;">
+        <span class="verdict verdict-{{ verdict_lower }}" style="font-size:1rem;padding:0.4rem 1rem;">
+          {{ sub.verdict }}
+        </span>
+        {% if sub.status == 'flagged' %}
+          <span style="color:var(--amber);font-size:0.85rem;">⚑ Awaiting lecturer review</span>
+        {% elif sub.status == 'genuine' %}
+          <span style="color:var(--green);font-size:0.85rem;">✓ Confirmed genuine</span>
+        {% elif sub.status == 'violation' %}
+          <span style="color:var(--red);font-size:0.85rem;">✗ Violation recorded</span>
+        {% elif sub.status == 'baseline' %}
+          <span style="color:var(--accent2);font-size:0.85rem;">◎ Baseline submission</span>
+        {% else %}
+          <span style="color:var(--green);font-size:0.85rem;">✓ Auto-promoted to permanent baseline</span>
+        {% endif %}
+      </div>
+
+      <!-- Score bars -->
+      {% if sub.status != 'baseline' %}
+
+      {# αQ bar — ℝ so may be negative; clamp display to [0, 5] #}
+      {% set aq = sub.alpha_q | float %}
+      {% set aq_pct = [[(aq | abs / 10.0 * 100), 0] | max, 100] | min %}
+      {% set aq_spiked = aq >= theta %}
+      <div class="score-bar-wrap">
+        <div class="score-bar-label">
+          <span class="key">Signal 1 · αQ</span>
+          <span class="val" style="color:{% if aq_spiked %}var(--red){% else %}var(--text){% endif %}">
+            {{ "%.3f"|format(aq) }}
+          </span>
+        </div>
+        <div class="score-bar-track">
+          <div class="score-bar-fill {% if aq_spiked %}spiked{% else %}signal1{% endif %}"
+               style="width:{{ aq_pct }}%"></div>
+          {# Threshold marker at θ/5 = 50% of the 0–5 range #}
+          <div class="threshold-marker" style="left:{{ (theta / 10.0 * 100) | round(1) }}%;">
+            <span class="threshold-label">θ={{ theta }}</span>
+          </div>
+        </div>
+      </div>
+
+      {# αS bar #}
+      {% set as_ = sub.alpha_s | float %}
+      {% set as_pct = [(as_ / 10.0 * 100), 100] | min %}
+      {% set as_spiked = as_ >= theta %}
+      <div class="score-bar-wrap">
+        <div class="score-bar-label">
+          <span class="key">Signal 2 · αS
+            {% if as_ == 0.0 %}<span style="color:var(--muted);font-size:0.72rem;">(suppressed)</span>{% endif %}
+          </span>
+          <span class="val" style="color:{% if as_spiked %}var(--red){% else %}var(--text){% endif %}">
+            {{ "%.3f"|format(as_) }}
+          </span>
+        </div>
+        <div class="score-bar-track">
+          <div class="score-bar-fill {% if as_spiked %}spiked{% else %}signal2{% endif %}"
+               style="width:{{ as_pct }}%"></div>
+          <div class="threshold-marker" style="left:{{ (theta / 10.0 * 100) | round(1) }}%;">
+            <span class="threshold-label">θ={{ theta }}</span>
+          </div>
+        </div>
+      </div>
+
+      {% else %}
+      <p class="muted">No anomaly scores for baseline submissions.</p>
+      {% endif %}
+    </div>
+
+    <!-- Lecturer verify buttons (flagged only) -->
+    {% if sub.status == 'flagged' %}
+    <div class="card" style="border-color:rgba(245,158,11,0.4);">
+      <div class="card-title">Lecturer Decision</div>
+      <p style="font-size:0.875rem;color:var(--muted);margin-bottom:1rem;">
+        Review the explanation below and decide whether this submission is genuine work or a violation.
+      </p>
+      <form method="POST" action="/verify/{{ sub.id }}" style="display:flex;gap:0.75rem;">
+        <input type="hidden" name="student_id" value="{{ sub.student_id }}"/>
+        <button name="decision" value="genuine" class="btn btn-success" style="flex:1;">
+          ✓ Mark Genuine — Update Profile
+        </button>
+        <button name="decision" value="violation" class="btn btn-danger" style="flex:1;">
+          ✗ Mark Violation — Rollback Profile
+        </button>
+      </form>
+    </div>
+    {% endif %}
+
+    <!-- Feature vector -->
+    {% if sub.features %}
+    <div class="card">
+      <div class="card-title">Feature Vector</div>
+      <table>
+        <thead>
+          <tr><th>Feature</th><th>Signal</th><th>Value</th></tr>
+        </thead>
+        <tbody>
+          {% set s1 = ['function_word_ratio','pronoun_distribution','sentence_length_variance','type_token_ratio','punctuation_rhythm'] %}
+          {% set s2 = ['avg_sentence_length','passive_voice_ratio','transition_word_density','flesch_reading_ease'] %}
+          {% for k, v in sub.features.items() %}
+          <tr>
+            <td class="mono" style="font-size:0.78rem;">{{ k }}</td>
+            <td class="muted" style="font-size:0.78rem;">
+              {% if k in s1 %}S1{% elif k in s2 %}S2{% endif %}
+            </td>
+            <td class="mono" style="font-size:0.78rem;">{{ "%.4f"|format(v) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── Right: Explanation + Text ── -->
+  <div style="display:flex;flex-direction:column;gap:1.5rem;">
+
+    {% if sub.explanation %}
+    <div class="card" style="border-color:rgba(239,68,68,0.3);">
+      <div class="card-title">⚑ Anomaly Explanation</div>
+      <p style="font-size:0.9rem;line-height:1.8;color:var(--text);">{{ sub.explanation }}</p>
+    </div>
+    {% elif sub.status == 'baseline' %}
+    <div class="card" style="border-color:rgba(99,102,241,0.3);">
+      <div class="card-title">◎ Baseline Submission</div>
+      <p style="font-size:0.9rem;color:var(--muted);">{{ sub.verdict }}</p>
+    </div>
+    {% else %}
+    <div class="card">
+      <div class="card-title">✓ No Anomaly Detected</div>
+      <p class="muted" style="font-size:0.875rem;">
+        Both signals are within normal range. Profile has been automatically
+        updated in the Permanent Baseline.
+      </p>
+    </div>
+    {% endif %}
+
+    <!-- Submission text preview -->
+    <div class="card">
+      <div class="card-title">Submission Text</div>
+      <div style="max-height:320px;overflow-y:auto;">
+        <p style="font-size:0.875rem;line-height:1.8;white-space:pre-wrap;color:var(--text);">{{ sub.text[:1500] }}{% if sub.text|length > 1500 %}<span class="muted">… [truncated]</span>{% endif %}</p>
+      </div>
+    </div>
+
+    <!-- Writing Profile Ψ — Diff View -->
+    {% if sub.profile_before or sub.profile_after %}
+    <div class="card">
+      <div class="card-title flex between">
+        <span>Writing Profile &#936; — Evolution</span>
+        {% if profile_diff.has_changes %}
+          <span style="font-size:0.75rem;color:var(--green);">&#9679; Changes detected</span>
+        {% else %}
+          <span style="font-size:0.75rem;color:var(--muted);">No changes</span>
+        {% endif %}
+      </div>
+
+      <!-- Source + Legend -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <div style="display:flex;gap:1.5rem;font-size:0.75rem;">
+          <span style="color:var(--green);">&#9650; Added</span>
+          <span style="color:var(--red);">&#9660; Removed</span>
+          <span style="color:var(--muted);">&#9632; Retained</span>
+        </div>
+        <span style="font-size:0.72rem;color:var(--muted);">
+          {% if profile_diff.source == 'llm' %}
+            <span style="color:var(--green);">&#9679;</span> LLM-articulated
+          {% else %}
+            <span style="color:var(--muted);">&#9632;</span> String comparison (fallback)
+          {% endif %}
+        </span>
+      </div>
+
+      <!-- Cell State — LLM source -->
+      {% if profile_diff.source == 'llm' and (profile_diff.llm_added or profile_diff.llm_removed or profile_diff.llm_retained) %}
+      <div style="margin-bottom:1.25rem;">
+        <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;
+                    color:var(--muted);margin-bottom:0.5rem;">Cell State — Long-term Identity</div>
+        {% for item in profile_diff.llm_added %}
+          <div style="background:rgba(16,185,129,0.08);border-left:3px solid var(--green);
+                      padding:0.4rem 0.75rem;margin-bottom:0.3rem;border-radius:0 4px 4px 0;
+                      font-size:0.82rem;color:var(--text);">
+            <span style="color:var(--green);font-weight:600;margin-right:0.4rem;">+</span>{{ item }}
+          </div>
+        {% endfor %}
+        {% for item in profile_diff.llm_removed %}
+          <div style="background:rgba(239,68,68,0.08);border-left:3px solid var(--red);
+                      padding:0.4rem 0.75rem;margin-bottom:0.3rem;border-radius:0 4px 4px 0;
+                      font-size:0.82rem;color:var(--muted);text-decoration:line-through;">
+            <span style="color:var(--red);font-weight:600;margin-right:0.4rem;">&#8722;</span>{{ item }}
+          </div>
+        {% endfor %}
+        {% for item in profile_diff.llm_retained %}
+          <div style="padding:0.4rem 0.75rem;margin-bottom:0.3rem;font-size:0.82rem;color:var(--muted);">
+            <span style="margin-right:0.4rem;opacity:0.4;">&#9632;</span>{{ item }}
+          </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Cell State — String fallback -->
+      {% if profile_diff.source == 'string' and profile_diff.cell %}
+      <div style="margin-bottom:1.25rem;">
+        <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;
+                    color:var(--muted);margin-bottom:0.5rem;">Cell State — Long-term Identity</div>
+        {% for item in profile_diff.cell %}
+          {% if item.state == 'added' %}
+            <div style="background:rgba(16,185,129,0.08);border-left:3px solid var(--green);
+                        padding:0.4rem 0.75rem;margin-bottom:0.3rem;border-radius:0 4px 4px 0;
+                        font-size:0.82rem;color:var(--text);">
+              <span style="color:var(--green);font-weight:600;margin-right:0.4rem;">+</span>{{ item.text }}
+            </div>
+          {% elif item.state == 'removed' %}
+            <div style="background:rgba(239,68,68,0.08);border-left:3px solid var(--red);
+                        padding:0.4rem 0.75rem;margin-bottom:0.3rem;border-radius:0 4px 4px 0;
+                        font-size:0.82rem;color:var(--muted);text-decoration:line-through;">
+              <span style="color:var(--red);font-weight:600;margin-right:0.4rem;">&#8722;</span>{{ item.text }}
+            </div>
+          {% else %}
+            <div style="padding:0.4rem 0.75rem;margin-bottom:0.3rem;font-size:0.82rem;color:var(--muted);">
+              <span style="margin-right:0.4rem;opacity:0.4;">&#9632;</span>{{ item.text }}
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Cell State diff -->
+      {% if profile_diff.cell %}
+      <div style="margin-bottom:1.25rem;">
+        <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;
+                    color:var(--muted);margin-bottom:0.5rem;">Cell State — Long-term Identity</div>
+        {% for item in profile_diff.cell %}
+          {% if item.state == 'added' %}
+            <div style="background:rgba(16,185,129,0.08);border-left:3px solid var(--green);
+                        padding:0.4rem 0.75rem;margin-bottom:0.3rem;border-radius:0 4px 4px 0;
+                        font-size:0.82rem;color:var(--text);">
+              <span style="color:var(--green);font-weight:600;margin-right:0.4rem;">+</span>{{ item.text }}
+            </div>
+          {% elif item.state == 'removed' %}
+            <div style="background:rgba(239,68,68,0.08);border-left:3px solid var(--red);
+                        padding:0.4rem 0.75rem;margin-bottom:0.3rem;border-radius:0 4px 4px 0;
+                        font-size:0.82rem;color:var(--muted);text-decoration:line-through;">
+              <span style="color:var(--red);font-weight:600;margin-right:0.4rem;">−</span>{{ item.text }}
+            </div>
+          {% else %}
+            <div style="padding:0.4rem 0.75rem;margin-bottom:0.3rem;
+                        font-size:0.82rem;color:var(--muted);">
+              <span style="margin-right:0.4rem;opacity:0.4;">&#9632;</span>{{ item.text }}
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Hidden State diff — field-by-field structured view -->
+      {% if profile_diff.hidden %}
+      <div style="margin-bottom:1.25rem;">
+        <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;
+                    color:var(--muted);margin-bottom:0.75rem;">Hidden State — Per Course</div>
+        {% for item in profile_diff.hidden %}
+        <div style="margin-bottom:1rem;">
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;">
+            <span style="font-family:var(--mono);font-size:0.78rem;color:var(--accent2);">{{ item.atype }}</span>
+            {% if item.state == 'added' %}<span style="font-size:0.7rem;color:var(--green);">+ new type</span>
+            {% elif item.state == 'removed' %}<span style="font-size:0.7rem;color:var(--red);">removed</span>
+            {% elif item.state == 'changed' %}<span style="font-size:0.7rem;color:var(--amber);">updated</span>
+            {% endif %}
+          </div>
+          {% if item.fields %}
+          <div style="display:grid;grid-template-columns:160px 1fr 1fr;font-size:0.78rem;
+                      border:1px solid var(--border);border-radius:6px;overflow:hidden;">
+            <div style="color:var(--muted);font-size:0.68rem;padding:0.3rem 0.5rem;
+                        background:var(--surface2);font-weight:600;">FIELD</div>
+            <div style="color:var(--muted);font-size:0.68rem;padding:0.3rem 0.5rem;
+                        background:var(--surface2);font-weight:600;">BEFORE</div>
+            <div style="color:var(--muted);font-size:0.68rem;padding:0.3rem 0.5rem;
+                        background:var(--surface2);font-weight:600;">AFTER</div>
+            {% for f in item.fields %}
+            <div style="color:var(--muted);padding:0.3rem 0.5rem;font-family:var(--mono);
+                        font-size:0.7rem;border-top:1px solid var(--border);">{{ f.field }}</div>
+            <div style="padding:0.3rem 0.5rem;border-top:1px solid var(--border);
+                        {% if f.state == 'changed' or f.state == 'removed' %}
+                        color:var(--red);text-decoration:line-through;opacity:0.8;
+                        {% else %}color:var(--muted);{% endif %}font-size:0.78rem;">
+              {{ f.before or '—' }}
+            </div>
+            <div style="padding:0.3rem 0.5rem;border-top:1px solid var(--border);
+                        {% if f.state == 'added' or f.state == 'changed' %}
+                        color:var(--green);font-weight:500;
+                        {% else %}color:var(--muted);{% endif %}font-size:0.78rem;">
+              {{ f.after or '—' }}
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Forget Candidates diff -->
+      {% if profile_diff.forget %}
+      <div>
+        <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;
+                    color:var(--muted);margin-bottom:0.5rem;">Forget Candidates</div>
+        {% for item in profile_diff.forget %}
+          {% if item.state == 'added' %}
+            <div style="background:rgba(249,115,22,0.08);border-left:3px solid var(--orange);
+                        padding:0.4rem 0.75rem;margin-bottom:0.3rem;border-radius:0 4px 4px 0;
+                        font-size:0.82rem;color:var(--text);">
+              <span style="color:var(--orange);font-weight:600;margin-right:0.4rem;">+</span>{{ item.text }}
+            </div>
+          {% elif item.state == 'removed' %}
+            <div style="background:rgba(16,185,129,0.08);border-left:3px solid var(--green);
+                        padding:0.4rem 0.75rem;margin-bottom:0.3rem;border-radius:0 4px 4px 0;
+                        font-size:0.82rem;color:var(--muted);text-decoration:line-through;">
+              <span style="color:var(--green);font-weight:600;margin-right:0.4rem;">−</span>{{ item.text }}
+            </div>
+          {% else %}
+            <div style="padding:0.4rem 0.75rem;margin-bottom:0.3rem;
+                        font-size:0.82rem;color:var(--muted);">
+              <span style="margin-right:0.4rem;opacity:0.4;">&#9632;</span>{{ item.text }}
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+
+    </div>
+    {% endif %}
+
+        <!-- Metadata -->
+    <div class="card">
+      <div class="card-title">Metadata</div>
+      <table>
+        <tr><td class="muted">Student</td><td>{{ student_name }}</td></tr>
+        <tr><td class="muted">Course</td><td>{{ sub.course_code }}</td></tr>
+        <tr><td class="muted">Submitted</td><td class="mono" style="font-size:0.82rem;">{{ sub.created_at }}</td></tr>
+        <tr><td class="muted">Status</td><td>{{ sub.status }}</td></tr>
+      </table>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+{% block title %}AuthenticAI — Lecturer Dashboard{% endblock %}
+{% block content %}
+
+<div class="flex between" style="margin-bottom:1.5rem;">
+  <h1 class="page-title">Lecturer Dashboard</h1>
+  {% if pending_flags %}
+  <a href="/flags" class="btn btn-ghost">
+    ⚑ {{ pending_flags | length }} pending flag{% if pending_flags|length != 1 %}s{% endif %}
+  </a>
+  {% endif %}
+</div>
+
+<div class="grid2">
+
+  <!-- ── Left: Submission Form ── -->
+  <div>
+    <div class="card">
+      <div class="card-title">New Submission</div>
+
+      <form method="POST" action="/submit" enctype="multipart/form-data" id="submitForm" onsubmit="handleSubmit(event)">
+
+        <div class="mt2">
+          <label>Student</label>
+          <select name="student_id" id="studentSelect" onchange="this.form.action='/submit?student='+this.value">
+            {% for s in students %}
+            <option value="{{ s.id }}" {% if s.id == selected_id %}selected{% endif %}>
+              {{ s.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="mt2">
+          <label>Course</label>
+          <select name="course_code">
+            {% for c in courses %}
+            <option value="{{ c.code }}">{{ c.code }} — {{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="mt2">
+          <label>Upload File (.txt or .docx)</label>
+          <div class="file-input-wrap" id="fileWrap">
+            <input type="file" name="file" accept=".txt,.docx" id="fileInput" onchange="showFileName(this)"/>
+            <div id="fileLabel">📄 Click to upload or drag a file</div>
+            <div class="hint">.txt or .docx · max 2 MB</div>
+          </div>
+        </div>
+
+        <div class="mt2">
+          <label>Or paste text directly</label>
+          <textarea name="text" placeholder="Paste submission text here..."></textarea>
+        </div>
+
+        <div class="mt2">
+          <button class="btn btn-primary" type="submit" id="submitBtn" style="width:100%;">
+            <span id="submitText">Analyse Submission →</span>
+            <span id="submitSpinner" style="display:none;">
+              <svg style="animation:spin 1s linear infinite;width:14px;height:14px;vertical-align:middle;margin-right:6px;"
+                   viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="30 70"/>
+              </svg>
+              Analysing — please wait...
+            </span>
+          </button>
+        </div>
+
+        <!-- Processing status bar -->
+        <div id="progressWrap" style="display:none;margin-top:0.75rem;">
+          <div style="background:var(--surface2);border-radius:9999px;height:4px;overflow:hidden;">
+            <div id="progressBar" style="height:100%;background:var(--accent);width:0%;
+                 transition:width 0.4s ease;border-radius:9999px;"></div>
+          </div>
+          <div id="progressLabel" style="font-size:0.75rem;color:var(--muted);margin-top:0.4rem;text-align:center;">
+            Uploading...
+          </div>
+        </div>
+
+      </form>
+
+      <style>
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      </style>
+
+      <script>
+        function showFileName(input) {
+          const label = document.getElementById('fileLabel');
+          if (input.files && input.files[0]) {
+            const name = input.files[0].name;
+            const size = (input.files[0].size / 1024).toFixed(1);
+            label.innerHTML = '✓ ' + name + ' <span style="color:var(--muted);font-size:0.75rem;">(' + size + ' KB)</span>';
+            label.style.color = 'var(--green)';
+          }
+        }
+
+        const steps = [
+          { label: 'Uploading file...', pct: 15 },
+          { label: 'Call 1 — extracting stylometric features...', pct: 35 },
+          { label: 'Computing αQ and αS scores...', pct: 55 },
+          { label: 'Call 2A — updating writing profile...', pct: 75 },
+          { label: 'Finalising...', pct: 92 },
+        ];
+
+        function handleSubmit(e) {
+          const btn    = document.getElementById('submitBtn');
+          const text   = document.getElementById('submitText');
+          const spinner = document.getElementById('submitSpinner');
+          const wrap   = document.getElementById('progressWrap');
+          const bar    = document.getElementById('progressBar');
+          const lbl    = document.getElementById('progressLabel');
+
+          // Show loading state
+          text.style.display    = 'none';
+          spinner.style.display = 'inline';
+          btn.disabled          = true;
+          btn.style.opacity     = '0.85';
+          wrap.style.display    = 'block';
+
+          // Step through progress labels
+          let i = 0;
+          function tick() {
+            if (i >= steps.length) return;
+            bar.style.width  = steps[i].pct + '%';
+            lbl.textContent  = steps[i].label;
+            i++;
+            setTimeout(tick, i === 1 ? 400 : 2800);
+          }
+          tick();
+        }
+      </script>
+    </div>
+
+    <!-- Profile snapshot -->
+    {% if profile %}
+    <div class="card mt3">
+      <div class="card-title">Writing Profile — {{ students | selectattr('id', 'equalto', selected_id) | map(attribute='name') | first }}</div>
+      {% if profile.psi_cell %}
+        <p style="font-size:0.875rem; color:var(--text); line-height:1.7;">{{ profile.psi_cell }}</p>
+      {% else %}
+        <p class="muted">No profile yet — submit at least one document to initialise.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── Right: History ── -->
+  <div>
+    <div class="card">
+      <div class="card-title flex between" style="margin-bottom:0.75rem;">
+        <span>Submission History</span>
+      </div>
+
+      {% if students|length < 10 %}
+      <!-- Tab strip for small lists -->
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:1rem;">
+        {% for s in students %}
+        <a href="/?student={{ s.id }}"
+           style="font-size:0.75rem;padding:0.2rem 0.6rem;border-radius:6px;
+                  background:{% if s.id == selected_id %}var(--accent){% else %}var(--surface2){% endif %};
+                  color:var(--text);text-decoration:none;">
+          {{ s.name.split()[0] }}
+          {% set cnt = submission_counts.get(s.id, 0) %}
+          {% if cnt > 0 %}
+          <span style="font-size:0.65rem;opacity:0.7;margin-left:2px;">{{ cnt }}</span>
+          {% endif %}
+        </a>
+        {% endfor %}
+      </div>
+
+      {% else %}
+      <!-- Searchable dropdown for large lists -->
+      <div style="position:relative;margin-bottom:1rem;">
+        <input type="text" id="studentSearch"
+               placeholder="Search students..."
+               value="{{ students | selectattr('id','equalto',selected_id) | map(attribute='name') | first | default('') }}"
+               style="width:100%;padding-right:2rem;"
+               autocomplete="off"
+               onclick="toggleStudentList(true)"
+               oninput="filterStudents(this.value)"/>
+        <div id="studentDropdown"
+             style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;
+                    background:var(--surface);border:1px solid var(--border);
+                    border-radius:8px;margin-top:4px;max-height:260px;overflow-y:auto;
+                    box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+          {% for s in students %}
+          <a href="/?student={{ s.id }}"
+             class="student-option"
+             data-name="{{ s.name | lower }}"
+             data-id="{{ s.id | lower }}"
+             style="display:flex;justify-content:space-between;align-items:center;
+                    padding:0.6rem 0.875rem;text-decoration:none;color:var(--text);
+                    {% if s.id == selected_id %}background:rgba(99,102,241,0.15);{% endif %}
+                    border-bottom:1px solid var(--border);">
+            <span>{{ s.name }}</span>
+            <span style="font-family:var(--mono);font-size:0.72rem;color:var(--muted);">
+              {{ s.id }}
+              {% set cnt = submission_counts.get(s.id, 0) %}
+              {% if cnt > 0 %}· {{ cnt }} sub{% if cnt != 1 %}s{% endif %}{% endif %}
+            </span>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+
+      <script>
+        function toggleStudentList(show) {
+          document.getElementById('studentDropdown').style.display = show ? 'block' : 'none';
+        }
+        function filterStudents(query) {
+          const q = query.toLowerCase();
+          toggleStudentList(true);
+          document.querySelectorAll('.student-option').forEach(el => {
+            const match = el.dataset.name.includes(q) || el.dataset.id.includes(q);
+            el.style.display = match ? 'flex' : 'none';
+          });
+        }
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+          if (!e.target.closest('#studentSearch') && !e.target.closest('#studentDropdown')) {
+            toggleStudentList(false);
+          }
+        });
+      </script>
+      {% endif %}
+
+      {% if history %}
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Course</th>
+            <th>αQ</th>
+            <th>αS</th>
+            <th>Verdict</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sub in history %}
+          <tr>
+            <td><a href="/result/{{ sub.id }}">#{{ sub.id }}</a></td>
+            <td class="muted">{{ sub.course_code }}</td>
+            <td class="mono" style="color:{% if sub.alpha_q >= 2.5 %}var(--red){% else %}var(--text){% endif %}">
+              {{ "%.2f"|format(sub.alpha_q) if sub.alpha_q is not none else '—' }}
+            </td>
+            <td class="mono" style="color:{% if sub.alpha_s >= 2.5 %}var(--red){% else %}var(--text){% endif %}">
+              {{ "%.2f"|format(sub.alpha_s) if sub.alpha_s is not none else '—' }}
+            </td>
+            <td>
+              {% set v = sub.verdict | lower | replace(' ', '') %}
+              <span class="verdict verdict-{{ v }}">{{ sub.verdict }}</span>
+            </td>
+            <td>
+              {% if sub.status == 'flagged' %}
+                <span style="color:var(--amber);font-size:0.8rem;">⚑ Awaiting review</span>
+              {% elif sub.status == 'genuine' %}
+                <span style="color:var(--green);font-size:0.8rem;">✓ Genuine</span>
+              {% elif sub.status == 'violation' %}
+                <span style="color:var(--red);font-size:0.8rem;">✗ Violation</span>
+              {% elif sub.status == 'baseline' %}
+                <span style="color:var(--accent2);font-size:0.8rem;">◎ Baseline</span>
+              {% else %}
+                <span style="color:var(--green);font-size:0.8rem;">✓ Clean</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted" style="padding:1rem 0;">No submissions yet for this student.</p>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}

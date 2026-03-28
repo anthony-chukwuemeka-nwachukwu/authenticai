@@ -1,0 +1,8 @@
+flask>=3.0.0
+flask-login>=0.6.0
+python-dotenv>=1.0.0
+python-docx>=1.1.0
+
+# Install the provider you need:
+anthropic>=0.25.0      # for LLM_PROVIDER=anthropic
+# openai>=1.0.0        # for LLM_PROVIDER=azure or openai

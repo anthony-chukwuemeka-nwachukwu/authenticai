@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}Admin Panel — AuthenticAI{% endblock %}
+{% block content %}
+
+<h1 class="page-title">Admin Panel</h1>
+
+<div style="max-width:800px;display:flex;flex-direction:column;gap:1.5rem;">
+
+  <!-- Superadmin: institutions overview -->
+  {% if is_superadmin and institutions %}
+  <div class="card">
+    <div class="card-title">All Institutions</div>
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Code</th><th>Users</th><th>Created</th></tr>
+      </thead>
+      <tbody>
+        {% for inst in institutions %}
+        <tr>
+          <td>{{ inst.name }}</td>
+          <td class="mono" style="font-size:0.82rem;">{{ inst.code }}</td>
+          <td class="muted">{{ inst.user_count }}</td>
+          <td class="muted mono" style="font-size:0.78rem;">{{ inst.created_at[:10] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- User management -->
+  <div class="card">
+    <div class="card-title">
+      {% if is_superadmin %}All Users{% else %}Users — {{ institution_name }}{% endif %}
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Username</th>
+          {% if is_superadmin %}<th>Institution</th>{% endif %}
+          <th>Role</th>
+          <th>Registered</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+        <tr>
+          <td>
+            {{ user.username }}
+            {% if user.id == current_id %}
+              <span style="font-size:0.7rem;color:var(--muted);">(you)</span>
+            {% endif %}
+          </td>
+          {% if is_superadmin %}
+          <td class="muted" style="font-size:0.82rem;">{{ user.institution_name or '—' }}</td>
+          {% endif %}
+          <td>
+            {% if user.role == 'superadmin' %}
+              <span style="font-size:0.78rem;background:rgba(239,68,68,0.15);
+                           color:var(--red);padding:2px 8px;border-radius:4px;">superadmin</span>
+            {% elif user.role == 'admin' %}
+              <span style="font-size:0.78rem;background:rgba(99,102,241,0.15);
+                           color:var(--accent2);padding:2px 8px;border-radius:4px;">admin</span>
+            {% else %}
+              <span style="font-size:0.78rem;color:var(--muted);">lecturer</span>
+            {% endif %}
+          </td>
+          <td class="muted mono" style="font-size:0.78rem;">{{ user.created_at[:10] }}</td>
+          <td>
+            {% if user.id != current_id and user.role != 'superadmin' %}
+              {% if user.role == 'lecturer' %}
+                <form method="POST" action="/admin/promote/{{ user.id }}" style="display:inline;">
+                  <button class="btn btn-ghost" type="submit"
+                          style="padding:0.25rem 0.6rem;font-size:0.75rem;">
+                    Promote
+                  </button>
+                </form>
+              {% elif user.role == 'admin' %}
+                <form method="POST" action="/admin/demote/{{ user.id }}" style="display:inline;">
+                  <button class="btn btn-ghost" type="submit"
+                          style="padding:0.25rem 0.6rem;font-size:0.75rem;color:var(--amber);">
+                    Demote
+                  </button>
+                </form>
+              {% endif %}
+            {% else %}
+              <span class="muted" style="font-size:0.78rem;">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Student management -->
+  {% if not is_superadmin %}
+  <div class="card">
+    <div class="card-title">Students</div>
+    {% if students %}
+    <table>
+      <thead><tr><th>ID</th><th>Name</th><th></th></tr></thead>
+      <tbody>
+        {% for s in students %}
+        <tr>
+          <td class="mono" style="font-size:0.85rem;">{{ s.id }}</td>
+          <td>{{ s.name }}</td>
+          <td>
+            <form method="POST" action="/admin/students/delete/{{ s.id }}"
+                  style="display:inline;"
+                  onsubmit="return confirm('Delete {{ s.name }} and all their data?')">
+              <button class="btn btn-ghost" type="submit"
+                      style="padding:0.2rem 0.5rem;font-size:0.75rem;color:var(--red);">
+                Delete
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted" style="font-size:0.875rem;">
+      No students yet. Upload a CSV via the Students page.
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- Course management — institution admins only -->
+  {% if not is_superadmin %}
+  <div class="card">
+    <div class="card-title">Courses</div>
+
+    <!-- Add course form -->
+    <form method="POST" action="/admin/courses/add"
+          style="display:grid;grid-template-columns:140px 1fr auto;gap:0.75rem;
+                 align-items:end;margin-bottom:1.25rem;">
+      <div>
+        <label>Code</label>
+        <input type="text" name="code" placeholder="BIOL301"
+               style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()"
+               required/>
+      </div>
+      <div>
+        <label>Course Name</label>
+        <input type="text" name="name" placeholder="Cell Biology Lab" required/>
+      </div>
+      <button class="btn btn-primary" type="submit" style="margin-bottom:1px;">
+        Add Course
+      </button>
+    </form>
+
+    <!-- Course list -->
+    {% if courses %}
+    <table>
+      <thead>
+        <tr><th>Code</th><th>Name</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for c in courses %}
+        <tr>
+          <td class="mono" style="font-size:0.85rem;">{{ c.code }}</td>
+          <td>{{ c.name }}</td>
+          <td>
+            <form method="POST" action="/admin/courses/delete/{{ c.id }}"
+                  style="display:inline;"
+                  onsubmit="return confirm('Delete {{ c.code }}?')">
+              <button class="btn btn-ghost" type="submit"
+                      style="padding:0.2rem 0.5rem;font-size:0.75rem;color:var(--red);">
+                Delete
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted" style="font-size:0.875rem;">
+      No courses yet. Add courses above so lecturers can select them when submitting.
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="card" style="border-color:rgba(99,102,241,0.2);">
+    <div class="card-title">How Access Levels Work</div>
+    <table>
+      <thead><tr><th>Role</th><th>Scope</th><th>Can do</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span style="color:var(--red);font-size:0.82rem;">superadmin</span></td>
+          <td class="muted">All institutions</td>
+          <td style="font-size:0.82rem;">See everything across all institutions</td>
+        </tr>
+        <tr>
+          <td><span style="color:var(--accent2);font-size:0.82rem;">admin</span></td>
+          <td class="muted">Own institution</td>
+          <td style="font-size:0.82rem;">Batch init, manage users, review flags</td>
+        </tr>
+        <tr>
+          <td><span style="color:var(--muted);font-size:0.82rem;">lecturer</span></td>
+          <td class="muted">Own institution</td>
+          <td style="font-size:0.82rem;">Submit, view results, review flags</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+{% endblock %}

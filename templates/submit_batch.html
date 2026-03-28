@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+{% block title %}Batch Submit — AuthenticAI{% endblock %}
+{% block content %}
+
+<div class="flex between" style="margin-bottom:1.5rem;">
+  <h1 class="page-title">Batch Submission</h1>
+  <a href="/" class="btn btn-ghost">← Single submission</a>
+</div>
+
+<div class="grid2" style="align-items:start;">
+
+  <!-- ── Left: Upload Form ── -->
+  <div style="display:flex;flex-direction:column;gap:1.5rem;">
+    <div class="card">
+      <div class="card-title">Upload Submissions</div>
+      <p style="font-size:0.875rem;color:var(--muted);margin-bottom:1rem;line-height:1.7;">
+        Upload a folder of <code>.txt</code> or <code>.docx</code> files named:<br>
+        <code style="color:var(--accent2);">{student_id}_{anything}.txt</code><br><br>
+        Examples:<br>
+        <code>s001_essay1.txt</code> — Alice, submission 1<br>
+        <code>s001_essay2.txt</code> — Alice, submission 2<br>
+        <code>s005_reflection_draft.docx</code> — Student s005<br><br>
+        Files are processed in alphabetical order per student.
+        The system handles cold start automatically.
+      </p>
+
+      <form method="POST" action="/submit/batch" enctype="multipart/form-data"
+            id="batchForm" onsubmit="handleSubmit(event)">
+
+        <div>
+          <label>Course</label>
+          {% if courses %}
+          <select name="course_code" required>
+            {% for c in courses %}
+            <option value="{{ c.code }}">{{ c.code }} — {{ c.name }}</option>
+            {% endfor %}
+          </select>
+          {% else %}
+          <div style="padding:0.65rem 0.875rem;background:var(--surface2);
+                      border:1px solid var(--border);border-radius:8px;
+                      font-size:0.85rem;color:var(--muted);">
+            No courses registered — ask your admin to add courses first.
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="mt2">
+          <label>Upload Folder</label>
+          <div class="file-input-wrap" id="fileWrap">
+            <input type="file" name="files" multiple accept=".txt,.docx"
+                   webkitdirectory id="filesInput" onchange="showFiles(this)"/>
+            <div id="fileLabel">📁 Click to select a folder</div>
+            <div class="hint">.txt or .docx · naming: studentid_anything.ext</div>
+          </div>
+        </div>
+
+        <div class="mt2">
+          <button class="btn btn-primary" type="submit" id="submitBtn"
+                  style="width:100%;" {% if not courses %}disabled{% endif %}>
+            <span id="submitText">Process Batch →</span>
+            <span id="submitSpinner" style="display:none;">
+              <svg style="animation:spin 1s linear infinite;width:14px;height:14px;
+                          vertical-align:middle;margin-right:6px;"
+                   viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor"
+                        stroke-width="3" stroke-dasharray="30 70"/>
+              </svg>
+              Processing submissions...
+            </span>
+          </button>
+        </div>
+
+        <!-- Progress -->
+        <div id="progressWrap" style="display:none;margin-top:0.75rem;">
+          <div style="background:var(--surface2);border-radius:9999px;height:4px;overflow:hidden;">
+            <div id="progressBar" style="height:100%;background:var(--accent);width:0%;
+                 transition:width 0.5s ease;border-radius:9999px;"></div>
+          </div>
+          <div id="progressLabel" style="font-size:0.75rem;color:var(--muted);
+               margin-top:0.4rem;text-align:center;">Uploading...</div>
+        </div>
+
+      </form>
+
+      <style>@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}</style>
+      <script>
+        function showFiles(input) {
+          const label = document.getElementById('fileLabel');
+          if (input.files && input.files.length > 0) {
+            const valid = Array.from(input.files)
+              .filter(f => f.name.match(/\.(txt|docx)$/i) && f.name.includes('_'));
+            label.innerHTML = '✓ ' + valid.length + ' valid file' +
+              (valid.length !== 1 ? 's' : '') + ' selected';
+            label.style.color = 'var(--green)';
+          }
+        }
+
+        const steps = [
+          { label: 'Uploading files...', pct: 10 },
+          { label: 'Grouping files by student...', pct: 20 },
+          { label: 'Running pipeline — Call 1 feature extraction...', pct: 40 },
+          { label: 'Running pipeline — Call 2A profile update...', pct: 65 },
+          { label: 'Computing αQ and αS scores...', pct: 85 },
+          { label: 'Saving results...', pct: 95 },
+        ];
+
+        function handleSubmit(e) {
+          const btn = document.getElementById('submitBtn');
+          document.getElementById('submitText').style.display = 'none';
+          document.getElementById('submitSpinner').style.display = 'inline';
+          btn.disabled = true;
+          btn.style.opacity = '0.85';
+          document.getElementById('progressWrap').style.display = 'block';
+
+          let i = 0;
+          const bar = document.getElementById('progressBar');
+          const lbl = document.getElementById('progressLabel');
+          function tick() {
+            if (i >= steps.length) return;
+            bar.style.width = steps[i].pct + '%';
+            lbl.textContent = steps[i].label;
+            i++;
+            setTimeout(tick, i === 1 ? 400 : 3500);
+          }
+          tick();
+        }
+      </script>
+    </div>
+
+    <!-- Naming convention -->
+    <div class="card">
+      <div class="card-title">Naming Convention</div>
+      <table>
+        <thead><tr><th>Filename</th><th>Parsed as</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="mono" style="font-size:0.8rem;">s001_essay1.txt</td>
+            <td class="muted" style="font-size:0.8rem;">Student s001 · submission 1</td>
+          </tr>
+          <tr>
+            <td class="mono" style="font-size:0.8rem;">s001_essay2.txt</td>
+            <td class="muted" style="font-size:0.8rem;">Student s001 · submission 2</td>
+          </tr>
+          <tr>
+            <td class="mono" style="font-size:0.8rem;">s005_reflection_draft.docx</td>
+            <td class="muted" style="font-size:0.8rem;">Student s005 · submission 1</td>
+          </tr>
+          <tr>
+            <td class="mono" style="font-size:0.8rem;">s005_v2_final.txt</td>
+            <td class="muted" style="font-size:0.8rem;">Student s005 · submission 2</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="muted" style="font-size:0.78rem;margin-top:0.75rem;">
+        Files not matching <code>studentid_anything.ext</code> are ignored.
+        Unregistered student IDs are skipped with a warning.
+      </p>
+    </div>
+  </div>
+
+  <!-- ── Right: Results ── -->
+  <div>
+    {% if result %}
+
+    <!-- Summary -->
+    <div class="card" style="margin-bottom:1.5rem;border-color:
+      {% if result.failed == 0 %}rgba(16,185,129,0.4)
+      {% elif result.succeeded == 0 %}rgba(239,68,68,0.4)
+      {% else %}rgba(245,158,11,0.4){% endif %};">
+      <div class="flex between" style="margin-bottom:0.75rem;">
+        <span class="card-title" style="margin:0;">
+          Results — {{ result.course_code }}
+        </span>
+        <span class="verdict
+          {% if result.failed == 0 %}verdict-clean
+          {% elif result.succeeded == 0 %}verdict-strongflag
+          {% else %}verdict-monitor{% endif %}">
+          {% if result.failed == 0 %}✓ All processed
+          {% elif result.succeeded == 0 %}✗ All failed
+          {% else %}⚠ Partial{% endif %}
+        </span>
+      </div>
+      <div class="grid3" style="gap:1rem;text-align:center;">
+        <div>
+          <div style="font-size:1.75rem;font-weight:700;color:var(--green);
+                      font-family:var(--display);">{{ result.succeeded }}</div>
+          <div class="muted" style="font-size:0.78rem;">Processed</div>
+        </div>
+        <div>
+          <div style="font-size:1.75rem;font-weight:700;color:var(--amber);
+                      font-family:var(--display);">{{ result.skipped }}</div>
+          <div class="muted" style="font-size:0.78rem;">Skipped</div>
+        </div>
+        <div>
+          <div style="font-size:1.75rem;font-weight:700;color:var(--red);
+                      font-family:var(--display);">{{ result.failed }}</div>
+          <div class="muted" style="font-size:0.78rem;">Failed</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Per-file breakdown -->
+    <div class="card">
+      <div class="card-title">Per-file breakdown</div>
+      <table>
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Student</th>
+            <th>αQ</th>
+            <th>Verdict</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fr in result.results %}
+          <tr>
+            <td class="mono" style="font-size:0.78rem;">{{ fr.filename }}</td>
+            <td class="muted" style="font-size:0.82rem;">{{ fr.student_id }}</td>
+            <td class="mono" style="font-size:0.82rem;">
+              {% if fr.alpha_q is not none %}
+                <span style="color:{% if fr.alpha_q|abs >= 1.5 %}var(--red){% else %}var(--text){% endif %};">
+                  {{ "%.2f"|format(fr.alpha_q) }}
+                </span>
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              {% if fr.verdict %}
+                {% set v = fr.verdict|lower|replace(' ','') %}
+                <span class="verdict verdict-{{ v }}" style="font-size:0.72rem;">
+                  {{ fr.verdict }}
+                </span>
+              {% else %}—{% endif %}
+            </td>
+            <td style="font-size:0.82rem;">
+              {% if fr.status == 'ok' %}
+                {% if fr.sub_id %}
+                  <a href="/result/{{ fr.sub_id }}" style="color:var(--green);">✓ View</a>
+                {% else %}
+                  <span style="color:var(--green);">✓ OK</span>
+                {% endif %}
+              {% elif fr.status == 'skipped' %}
+                <span style="color:var(--amber);">⚠ {{ fr.error }}</span>
+              {% else %}
+                <span style="color:var(--red);">✗ {{ fr.error }}</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% else %}
+    <div class="card" style="text-align:center;padding:3rem;">
+      <p style="font-size:2rem;margin-bottom:0.5rem;">📂</p>
+      <p class="muted">Upload a folder to process submissions for all students at once.</p>
+      <p class="muted" style="font-size:0.8rem;margin-top:0.5rem;">
+        Each file runs through the full AuthenticAI pipeline.<br>
+        Results link directly to individual submission pages.
+      </p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

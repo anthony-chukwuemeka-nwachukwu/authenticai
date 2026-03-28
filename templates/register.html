@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Register — AuthenticAI{% endblock %}
+{% block content %}
+
+<div style="max-width:460px;margin:3rem auto;">
+  <div style="text-align:center;margin-bottom:2rem;">
+    <div style="font-size:2rem;margin-bottom:0.5rem;">◎</div>
+    <h1 style="font-family:var(--display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;">
+      Create Account
+    </h1>
+    <p class="muted" style="font-size:0.875rem;margin-top:0.25rem;">
+      Enter your institution code to join or create an institution.
+    </p>
+  </div>
+
+  <div class="card">
+    <form method="POST" action="/register">
+
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+                  padding:1rem;margin-bottom:1rem;">
+        <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;
+                    color:var(--accent2);margin-bottom:0.75rem;">Institution</div>
+
+        <div>
+          <label>Institution Code</label>
+          <input type="text" name="institution_code"
+                 value="{{ fields.get('institution_code','') }}"
+                 placeholder="e.g. WUSTL2026" autocomplete="off" required
+                 style="text-transform:uppercase;"
+                 oninput="this.value=this.value.toUpperCase()"/>
+          <div class="muted" style="font-size:0.75rem;margin-top:0.3rem;">
+            Existing code → join that institution · New code → create a new one
+          </div>
+        </div>
+
+        <div class="mt2">
+          <label>Institution Name <span style="color:var(--muted);font-weight:400;">(only if creating new)</span></label>
+          <input type="text" name="institution_name"
+                 value="{{ fields.get('institution_name','') }}"
+                 placeholder="e.g. Washington University in St. Louis"/>
+        </div>
+      </div>
+
+      <div>
+        <label>Username</label>
+        <input type="text" name="username" value="{{ fields.get('username','') }}"
+               autocomplete="username" required autofocus minlength="3"/>
+      </div>
+
+      <div class="mt2">
+        <label>Password</label>
+        <input type="password" name="password" autocomplete="new-password" required minlength="6"/>
+        <div class="muted" style="font-size:0.75rem;margin-top:0.3rem;">Minimum 6 characters</div>
+      </div>
+
+      <div class="mt2">
+        <label>Confirm Password</label>
+        <input type="password" name="confirm_password" autocomplete="new-password" required/>
+      </div>
+
+      <div class="mt2">
+        <label>Security Question</label>
+        <select name="security_question" required>
+          {% for q in security_questions %}
+          <option value="{{ q }}" {% if fields.get('security_question') == q %}selected{% endif %}>{{ q }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mt2">
+        <label>Security Answer</label>
+        <input type="text" name="security_answer" autocomplete="off" required/>
+        <div class="muted" style="font-size:0.75rem;margin-top:0.3rem;">Case-insensitive</div>
+      </div>
+
+      <div class="mt2">
+        <label>Admin Code <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
+        <input type="password" name="admin_code" autocomplete="off"
+               placeholder="Leave blank for lecturer account"/>
+        <div class="muted" style="font-size:0.75rem;margin-top:0.3rem;">
+          Enter admin or superadmin code to register with elevated role.
+        </div>
+      </div>
+
+      {% if error %}
+      <div class="flash flash-error mt2">{{ error }}</div>
+      {% endif %}
+
+      <div class="mt2">
+        <button class="btn btn-primary" type="submit" style="width:100%;">
+          Create Account →
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div style="text-align:center;margin-top:1rem;font-size:0.85rem;color:var(--muted);">
+    Already have an account? <a href="/login">Sign in</a>
+  </div>
+</div>
+{% endblock %}

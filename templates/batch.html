@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Register Students — AuthenticAI{% endblock %}
+{% block content %}
+
+<h1 class="page-title">Register Students</h1>
+
+<div class="grid2" style="align-items:start;">
+
+  <!-- ── Left: Upload Form ── -->
+  <div style="display:flex;flex-direction:column;gap:1.5rem;">
+
+    <div class="card">
+      <div class="card-title">Upload CSV</div>
+      <p style="font-size:0.875rem;color:var(--muted);margin-bottom:1rem;line-height:1.7;">
+        Upload a <code>.csv</code> file with two columns:<br>
+        <code style="color:var(--accent2);">student_id, name</code><br><br>
+        Students already in the system will have their names updated.
+        No LLM calls are made — baselines are built naturally when
+        lecturers submit student work.
+      </p>
+
+      <form method="POST" action="/batch" enctype="multipart/form-data"
+            id="batchForm" onsubmit="handleSubmit(event)">
+        <div class="file-input-wrap" style="margin-bottom:1rem;" id="fileWrap">
+          <input type="file" name="csv_file" accept=".csv"
+                 id="csvFile" onchange="showFileName(this)"/>
+          <div id="fileLabel">📄 Click to upload a CSV file</div>
+          <div class="hint">.csv · two columns: student_id, name</div>
+        </div>
+        <button class="btn btn-primary" type="submit" id="submitBtn" style="width:100%;">
+          <span id="submitText">Register Students →</span>
+          <span id="submitSpinner" style="display:none;">
+            <svg style="animation:spin 1s linear infinite;width:14px;height:14px;vertical-align:middle;margin-right:6px;"
+                 viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="30 70"/>
+            </svg>
+            Registering...
+          </span>
+        </button>
+      </form>
+
+      <style>@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}</style>
+      <script>
+        function showFileName(input) {
+          const label = document.getElementById('fileLabel');
+          if (input.files && input.files[0]) {
+            label.innerHTML = '✓ ' + input.files[0].name;
+            label.style.color = 'var(--green)';
+          }
+        }
+        function handleSubmit(e) {
+          const btn = document.getElementById('submitBtn');
+          document.getElementById('submitText').style.display = 'none';
+          document.getElementById('submitSpinner').style.display = 'inline';
+          btn.disabled = true;
+          btn.style.opacity = '0.85';
+        }
+      </script>
+    </div>
+
+    <!-- CSV format guide -->
+    <div class="card">
+      <div class="card-title">CSV Format</div>
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.75rem;">
+        Header row is optional — it will be detected and skipped automatically.
+      </p>
+      <div style="background:var(--surface2);border-radius:6px;padding:0.75rem;
+                  font-family:var(--mono);font-size:0.8rem;color:var(--text);">
+        student_id,name<br>
+        s001,Alice Mensah<br>
+        s002,James Okoye<br>
+        s003,Priya Nair<br>
+        s004,Carlos Rivera
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Right: Results ── -->
+  <div>
+    {% if result %}
+    <div class="card" style="margin-bottom:1.5rem;border-color:
+      {% if result.ok %}rgba(16,185,129,0.4){% else %}rgba(245,158,11,0.4){% endif %};">
+      <div class="flex between" style="margin-bottom:0.75rem;">
+        <span class="card-title" style="margin:0;">Result</span>
+        <span class="verdict {% if result.ok %}verdict-clean{% else %}verdict-monitor{% endif %}">
+          {% if result.ok %}✓ Complete{% else %}⚠ Partial{% endif %}
+        </span>
+      </div>
+      <div class="grid3" style="gap:1rem;text-align:center;">
+        <div>
+          <div style="font-size:1.75rem;font-weight:700;color:var(--green);font-family:var(--display);">
+            {{ result.created }}
+          </div>
+          <div class="muted" style="font-size:0.78rem;">Added</div>
+        </div>
+        <div>
+          <div style="font-size:1.75rem;font-weight:700;color:var(--accent2);font-family:var(--display);">
+            {{ result.updated }}
+          </div>
+          <div class="muted" style="font-size:0.78rem;">Updated</div>
+        </div>
+        <div>
+          <div style="font-size:1.75rem;font-weight:700;color:var(--red);font-family:var(--display);">
+            {{ result.failed }}
+          </div>
+          <div class="muted" style="font-size:0.78rem;">Failed</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Per-student breakdown</div>
+      <table>
+        <thead>
+          <tr><th>Student ID</th><th>Name</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          {% for sr in result.results %}
+          <tr>
+            <td class="mono">{{ sr.student_id }}</td>
+            <td>{{ sr.name }}</td>
+            <td>
+              {% if sr.status == 'ok' %}
+                <span style="color:var(--green);font-size:0.82rem;">✓ Added</span>
+              {% elif sr.status == 'updated' %}
+                <span style="color:var(--accent2);font-size:0.82rem;">↻ Updated</span>
+              {% elif sr.status == 'failed' %}
+                <span style="color:var(--red);font-size:0.82rem;">✗ {{ sr.error }}</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% else %}
+    <div class="card" style="text-align:center;padding:3rem;">
+      <p style="font-size:2rem;margin-bottom:0.5rem;">👥</p>
+      <p class="muted">Upload a CSV to register students.</p>
+      <p class="muted" style="font-size:0.8rem;margin-top:0.5rem;">
+        Students will appear in the lecturer dropdown immediately.<br>
+        Lecturers build baselines naturally through submissions.
+      </p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

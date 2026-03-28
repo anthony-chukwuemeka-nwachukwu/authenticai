@@ -1,0 +1,10 @@
+authenticai.db
+authenticai.db-wal
+authenticai.db-shm
+.env
+__pycache__/
+*.pyc
+*.pyo
+test-data*.zip
+test*.zip
+.vscode/

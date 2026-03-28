@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Login — AuthenticAI{% endblock %}
+{% block content %}
+
+<div style="max-width:420px;margin:4rem auto;">
+  <div style="text-align:center;margin-bottom:2rem;">
+    <div style="font-size:2rem;margin-bottom:0.5rem;">◎</div>
+    <h1 style="font-family:var(--display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;">
+      AuthenticAI
+    </h1>
+    <p class="muted" style="font-size:0.875rem;margin-top:0.25rem;">Sign in to your account</p>
+  </div>
+
+  <div class="card">
+    <form method="POST" action="/login">
+      <div>
+        <label>Username</label>
+        <input type="text" name="username" autocomplete="username"
+               value="{{ username or '' }}" required autofocus/>
+      </div>
+      <div class="mt2">
+        <label>Password</label>
+        <input type="password" name="password" autocomplete="current-password" required/>
+      </div>
+      {% if error %}
+      <div class="flash flash-error mt2">{{ error }}</div>
+      {% endif %}
+      <div class="mt2">
+        <button class="btn btn-primary" type="submit" style="width:100%;">
+          Sign In →
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div style="text-align:center;margin-top:1rem;font-size:0.85rem;color:var(--muted);">
+    No account?
+    <a href="/register">Register</a>
+    &nbsp;·&nbsp;
+    <a href="/forgot-password">Forgot password?</a>
+  </div>
+</div>
+{% endblock %}

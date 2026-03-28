@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Pending Flags — AuthenticAI{% endblock %}
+{% block content %}
+
+<h1 class="page-title">Pending Flags</h1>
+
+{% if flags %}
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Student</th>
+        <th>Course</th>
+        <th>αQ</th>
+        <th>αS</th>
+        <th>Verdict</th>
+        <th>Submitted</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in flags %}
+      <tr>
+        <td><a href="/result/{{ f.id }}">#{{ f.id }}</a></td>
+        <td>{{ f.student_name }}</td>
+        <td class="muted">{{ f.course_code }}</td>
+        <td class="mono" style="color:{% if f.alpha_q >= 2.5 %}var(--red){% else %}var(--text){% endif %}">
+          {{ "%.2f"|format(f.alpha_q) }}
+        </td>
+        <td class="mono" style="color:{% if f.alpha_s >= 2.5 %}var(--red){% else %}var(--text){% endif %}">
+          {{ "%.2f"|format(f.alpha_s) }}
+        </td>
+        <td>
+          {% set v = f.verdict | lower | replace(' ', '') %}
+          <span class="verdict verdict-{{ v }}">{{ f.verdict }}</span>
+        </td>
+        <td class="muted mono" style="font-size:0.78rem;">{{ f.created_at[:16] }}</td>
+        <td><a href="/result/{{ f.id }}" class="btn btn-ghost" style="padding:0.3rem 0.6rem;font-size:0.78rem;">Review →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:3rem;">
+  <p style="font-size:2rem;margin-bottom:0.5rem;">✓</p>
+  <p class="muted">No pending flags. All submissions are within normal range.</p>
+</div>
+{% endif %}
+
+{% endblock %}
