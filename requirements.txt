@@ -5,5 +5,5 @@ python-docx>=1.1.0
 
 # Install the provider you need:
 anthropic>=0.25.0      # for LLM_PROVIDER=anthropic
-# openai>=1.0.0        # for LLM_PROVIDER=azure or openai
+openai>=1.0.0        # for LLM_PROVIDER=azure or openai
 gunicorn>=21.2.0
