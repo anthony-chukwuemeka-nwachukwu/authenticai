@@ -13,7 +13,7 @@ Roles:
   lecturer   — institution-scoped
 """
 
-import os, sqlite3
+import os
 from datetime import datetime
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -53,24 +53,14 @@ def init_users_table():
 
 
 def get_user_by_id(user_id):
-    conn = db.get_conn()
-    row = conn.execute(
-        "SELECT id, username, role, institution_id FROM users WHERE id = ?",
-        (user_id,)
-    ).fetchone()
-    conn.close()
+    row = db.get_user_by_id(user_id)
     if row:
         return User(row["id"], row["username"], row["role"], row["institution_id"])
     return None
 
 
 def get_user_by_username(username):
-    conn = db.get_conn()
-    row = conn.execute(
-        "SELECT * FROM users WHERE username = ?", (username,)
-    ).fetchone()
-    conn.close()
-    return dict(row) if row else None
+    return db.get_user_by_username(username)
 
 
 def get_all_users(institution_id=None):
@@ -93,12 +83,7 @@ def get_all_users(institution_id=None):
 
 
 def count_users_in_institution(institution_id):
-    conn = db.get_conn()
-    n = conn.execute(
-        "SELECT COUNT(*) FROM users WHERE institution_id = ?", (institution_id,)
-    ).fetchone()[0]
-    conn.close()
-    return n
+    return db.count_users_in_institution(institution_id)
 
 
 # ── Registration ──────────────────────────────────────────────────────────────
@@ -152,26 +137,16 @@ def register_user(username, password, security_question, security_answer,
             role = "admin"
 
     try:
-        conn = db.get_conn()
-        conn.execute("""
-            INSERT INTO users
-                (username, password_hash, security_question,
-                 security_answer_hash, role, institution_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
+        user_id = db.insert_user(
             username.strip(),
             generate_password_hash(password),
             security_question,
             generate_password_hash(security_answer.strip().lower()),
             role,
-            institution_id,
-            datetime.utcnow().isoformat()
-        ))
-        user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-        conn.commit()
-        conn.close()
+            institution_id
+        )
         return True, User(user_id, username.strip(), role, institution_id)
-    except sqlite3.IntegrityError:
+    except Exception:
         return False, "Username already taken."
 
 
@@ -199,36 +174,19 @@ def reset_password(username, security_answer, new_password):
         return False, "Username not found."
     if not check_password_hash(row["security_answer_hash"], security_answer.strip().lower()):
         return False, "Security answer is incorrect."
-    conn = db.get_conn()
-    conn.execute(
-        "UPDATE users SET password_hash = ? WHERE username = ?",
-        (generate_password_hash(new_password), username)
-    )
-    conn.commit()
-    conn.close()
+    db.update_user_password(username, generate_password_hash(new_password))
     return True, None
 
 
 # ── Role management ───────────────────────────────────────────────────────────
 
 def promote_user(user_id):
-    conn = db.get_conn()
-    conn.execute("UPDATE users SET role = 'admin' WHERE id = ?", (user_id,))
-    conn.commit()
-    conn.close()
+    db.update_user_role(user_id, 'admin')
     return True, None
 
 
 def demote_user(user_id, institution_id):
-    conn = db.get_conn()
-    admin_count = conn.execute(
-        "SELECT COUNT(*) FROM users WHERE role = 'admin' AND institution_id = ?",
-        (institution_id,)
-    ).fetchone()[0]
-    if admin_count <= 1:
-        conn.close()
+    if db.count_admins_in_institution(institution_id) <= 1:
         return False, "Cannot demote the last admin of this institution."
-    conn.execute("UPDATE users SET role = 'lecturer' WHERE id = ?", (user_id,))
-    conn.commit()
-    conn.close()
+    db.update_user_role(user_id, 'lecturer')
     return True, None
