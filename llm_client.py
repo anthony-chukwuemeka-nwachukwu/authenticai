@@ -8,6 +8,7 @@ Supported providers (set LLM_PROVIDER env var):
   anthropic  — Anthropic API directly (default)
   azure      — Azure OpenAI Service
   openai     — OpenAI API directly
+  gemini     — Google Gemini API
 
 Environment variables by provider
 ──────────────────────────────────
@@ -28,14 +29,17 @@ openai:
   OPENAI_API_KEY=sk-...
   LLM_MODEL=gpt-4o                 (any OpenAI model string)
 
+gemini:
+  LLM_PROVIDER=gemini
+  GEMINI_API_KEY=...
+  LLM_MODEL=gemini-2.0-flash       (any Gemini model string)
+
 Usage (in llm_calls.py):
   from llm_client import chat
   response_text = chat(system_prompt, user_prompt, max_tokens=512)
 """
 
 import os
-from dotenv import load_dotenv
-load_dotenv()
 
 
 def chat(system: str, user: str, max_tokens: int = 1024) -> str:
@@ -52,10 +56,12 @@ def chat(system: str, user: str, max_tokens: int = 1024) -> str:
         return _chat_azure(system, user, max_tokens)
     elif provider == "openai":
         return _chat_openai(system, user, max_tokens)
+    elif provider == "gemini":
+        return _chat_gemini(system, user, max_tokens)
     else:
         raise RuntimeError(
             f"Unknown LLM_PROVIDER '{provider}'. "
-            "Supported values: anthropic, azure, openai"
+            "Supported values: anthropic, azure, openai, gemini"
         )
 
 
@@ -122,7 +128,7 @@ def _chat_azure(system: str, user: str, max_tokens: int) -> str:
 
     response = client.chat.completions.create(
         model=deployment,
-        max_completion_tokens=max_tokens,
+        max_tokens=max_tokens,
         messages=[
             {"role": "system", "content": system},
             {"role": "user",   "content": user},
@@ -151,10 +157,43 @@ def _chat_openai(system: str, user: str, max_tokens: int) -> str:
 
     response = client.chat.completions.create(
         model=model,
-        max_completion_tokens=max_tokens,
+        max_tokens=max_tokens,
         messages=[
             {"role": "system", "content": system},
             {"role": "user",   "content": user},
         ]
     )
     return response.choices[0].message.content.strip()
+
+# ── Google Gemini ─────────────────────────────────────────────────────────────
+
+def _chat_gemini(system: str, user: str, max_tokens: int) -> str:
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        raise RuntimeError(
+            "google-generativeai package not installed. "
+            "Run: pip install google-generativeai"
+        )
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "LLM_PROVIDER=gemini requires GEMINI_API_KEY.\n"
+            "Export: export GEMINI_API_KEY=..."
+        )
+
+    model_name = os.environ.get("LLM_MODEL", "gemini-2.0-flash")
+    genai.configure(api_key=api_key)
+
+    model = genai.GenerativeModel(
+        model_name=model_name,
+        system_instruction=system,
+        generation_config=genai.types.GenerationConfig(
+            max_output_tokens=max_tokens,
+            temperature=0.2,
+        )
+    )
+
+    response = model.generate_content(user)
+    return response.text.strip()

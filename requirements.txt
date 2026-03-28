@@ -8,3 +8,7 @@ anthropic>=0.25.0      # for LLM_PROVIDER=anthropic
 openai>=1.0.0        # for LLM_PROVIDER=azure or openai
 
 psycopg2-binary>=2.9.0
+
+google-generativeai>=0.8.0
+
+google-genai>=0.8.0
